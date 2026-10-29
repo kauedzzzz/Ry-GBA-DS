@@ -1,0 +1,36 @@
+# Build output and CMake artifacts
+build/
+bin/
+*.o
+*.a
+*.so
+compile_commands.json
+.cache/
+CMakeCache.txt
+CMakeFiles/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Emulator saves, states and ROMs (preserva apenas a demo embutida)
+*.sav
+*.dsv
+*.state*
+*.srm
+roms/*.nds
+roms/*.dsi
+roms/*.srl
+roms/*.gba
+!roms/GBA_Core_Lab_Demo.gba
+
+# Local configs, tools and logs
+eden_library.cfg
+*.log
+.aider*
+
+# OS artifacts
+.DS_Store
+Thumbs.db

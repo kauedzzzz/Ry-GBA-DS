@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Cartridge / Obsidian Shield Base -->
+  <polygon points="26,18 174,18 184,28 184,174 172,186 28,186 16,174 16,28" fill="#1a1c23" stroke="#2e3340" stroke-width="3"/>
+  <!-- GBA Cartridge Top Grip Notches -->
+  <rect x="44" y="18" width="112" height="12" fill="#22252e"/>
+  <rect x="56" y="21" width="16" height="5" fill="#121316"/>
+  <rect x="92" y="21" width="16" height="5" fill="#121316"/>
+  <rect x="128" y="21" width="16" height="5" fill="#121316"/>
+
+  <!-- Inner Obsidian Recessed Canvas -->
+  <polygon points="28,36 172,36 172,172 28,172" fill="#121316" stroke="#22252e" stroke-width="2"/>
+
+  <!-- Dragon Upper Horn, Crest & Brow Silhouette (Dragon Fire Red) -->
+  <polygon points="32,102 42,56 84,32 162,38 128,54 166,62 128,78 92,76 62,94" fill="#e63946"/>
+  <!-- Dragon Lower Snout, Jaw & Tail Scale Curve wrapping the D-Pad -->
+  <polygon points="32,102 62,94 106,88 122,96 88,104 60,116 54,144 88,162 114,166 76,174 42,160 26,130" fill="#c92a37"/>
+  <!-- Dragon Cheek & Fang Accent -->
+  <polygon points="74,92 106,88 98,102 86,96" fill="#f87171"/>
+
+  <!-- Fierce Dragon Eye (Emerald Scale #10b981 + Obsidian Slit Pupil) -->
+  <polygon points="74,66 98,55 116,65 92,74" fill="#10b981"/>
+  <polygon points="93,57 97,57 99,65 97,72 93,72 91,65" fill="#121316"/>
+
+  <!-- Intertwined Retro D-Pad (Polished Dark Metal #22252e) -->
+  <rect x="90" y="121" width="72" height="24" fill="#22252e" stroke="#383e4e" stroke-width="2"/>
+  <rect x="114" y="97" width="24" height="72" fill="#22252e" stroke="#383e4e" stroke-width="2"/>
+  <rect x="115" y="120" width="22" height="26" fill="#22252e"/>
+
+  <!-- D-Pad Directional Triangles (Emerald Scales) -->
+  <polygon points="126,102 120,112 132,112" fill="#10b981"/>
+  <polygon points="126,164 120,154 132,154" fill="#10b981"/>
+  <polygon points="95,133 105,127 105,139" fill="#10b981"/>
+  <polygon points="157,133 147,127 147,139" fill="#10b981"/>
+
+  <!-- D-Pad Dragon Core Pivot -->
+  <circle cx="126" cy="133" r="5" fill="#e63946"/>
+</svg>
+

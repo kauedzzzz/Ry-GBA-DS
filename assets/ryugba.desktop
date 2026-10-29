@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=RyūDS / RyūGBA
+GenericName=Emulador de Nintendo DS e Game Boy Advance
+Comment=Emulador híbrido de Nintendo DS (.nds) e GBA (.gba) — Tema Dragon / UX melonDS
+Exec=/home/kaue/Downloads/projetos/gba-emulator/build/ryugba %f
+TryExec=/home/kaue/Downloads/projetos/gba-emulator/build/ryugba
+Path=/home/kaue/Downloads/projetos/gba-emulator
+Icon=/home/kaue/Downloads/projetos/gba-emulator/assets/ryu_icon.svg
+Terminal=false
+Categories=Game;Emulator;
+MimeType=application/x-nintendo-ds-rom;application/x-gba-rom;
+Keywords=NDS;Nintendo DS;GBA;Game Boy Advance;Emulator;RyuDS;RyuGBA;Dragon;
+StartupWMClass=ryugba
+StartupNotify=true

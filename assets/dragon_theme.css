@@ -1,0 +1,30 @@
+/* ==========================================================================
+   RyūGBA — Dragon Visual Identity & melonDS Minimalist UX Theme Sheet
+   ========================================================================== */
+
+:root {
+  /* Fundos Principais (Ardósia Profunda / Grafite Obsidiana) */
+  --bg-obsidian:        #121316;
+  --bg-slate-deep:      #1a1c23;
+
+  /* Superfícies de Diálogos, Menus e Modais (Escamas Polidas / Metal Escuro) */
+  --surface-scales:     #22252e;
+  --surface-hover:      #2b2f3b;
+  --surface-border:     #343947;
+
+  /* Acentos e Destaques (Vermelho Fogo Dracônico & Escamas Esmeralda) */
+  --accent-dragon-red:  #e63946;
+  --accent-dragon-dark: #b92532;
+  --accent-emerald:     #10b981;
+  --accent-emerald-dim: #0b815a;
+
+  /* Tipografia */
+  --text-primary:       #f1f3f7;
+  --text-secondary:     #9ba3b5;
+  --text-muted:         #646c7e;
+
+  /* Dimensões estilo melonDS */
+  --menubar-height:     26px;
+  --modal-radius:       4px;
+}
+
