@@ -222,7 +222,9 @@ bool ConfigManager::loadFrom(const std::filesystem::path& path) {
     if (json.empty()) return false;
 
     AppConfig parsed = makeDefaults();
-    parsed.speedPercent = readIntField(json, "speedPercent", 100);
+    parsed.speedPercent     = readIntField(json, "speedPercent", 100);
+    parsed.fastForwardMode  = static_cast<FastForwardMode>(std::clamp(readIntField(json, "fastForwardMode", static_cast<int>(FastForwardMode::Hold)), 0, 1));
+    parsed.fastForwardSpeed = static_cast<FastForwardSpeed>(readIntField(json, "fastForwardSpeed", static_cast<int>(FastForwardSpeed::Speed8x)));
 
     if (std::size_t dirPos = findJsonKey(json, "lastBrowseDirectory"); dirPos != std::string_view::npos) {
         parseStringValue(json, dirPos, parsed.lastBrowseDirectory);
@@ -307,6 +309,8 @@ bool ConfigManager::saveTo(const std::filesystem::path& path) const {
     out << "{\n"
         << "  \"emulator\": \"RyuDS_RyuGBA\",\n"
         << "  \"speedPercent\": " << m_config.speedPercent << ",\n"
+        << "  \"fastForwardMode\": " << static_cast<int>(m_config.fastForwardMode) << ",\n"
+        << "  \"fastForwardSpeed\": " << static_cast<int>(m_config.fastForwardSpeed) << ",\n"
         << "  \"lastBrowseDirectory\": \"" << jsonEscape(m_config.lastBrowseDirectory) << "\",\n"
         << "  \"video\": {\n"
         << "    \"scale\": " << m_config.video.scale << ",\n"

@@ -46,6 +46,8 @@ public:
     // Libera todos os botões virtuais (ex: ao abrir um modal ou pausar)
     void releaseAllInputs(gba::core::ICoreEmulator& core) noexcept;
 
+    [[nodiscard]] bool isHotkeyActive(config::HotkeyAction hk) const noexcept;
+
     [[nodiscard]] std::string activeControllerName() const;
     [[nodiscard]] static std::string formatKeyName(int scancode);
     [[nodiscard]] static std::string formatJoyName(config::JoyBindType type, int code);

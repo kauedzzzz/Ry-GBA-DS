@@ -172,11 +172,25 @@ struct NdsBootConfig {
     std::string firmwarePath{"firmware.bin"};
 };
 
+enum class FastForwardMode : uint8_t {
+    Hold   = 0, // Acelera enquanto a tecla/botão estiver pressionado
+    Toggle = 1  // Alterna ligado/desligado a cada acionamento
+};
+
+enum class FastForwardSpeed : uint8_t {
+    Speed2x  = 2,  // 2x (120 FPS)
+    Speed4x  = 4,  // 4x (240 FPS)
+    Speed8x  = 8,  // 8x (480 FPS)
+    Uncapped = 0   // Velocidade Máxima sem limitador
+};
+
 struct AppConfig {
-    VideoConfig   video{};
-    AudioConfig   audio{};
-    NdsBootConfig ndsBoot{};
-    int           speedPercent{100}; // 100, 150, 200, 300, 0 (Uncapped)
+    VideoConfig      video{};
+    AudioConfig      audio{};
+    NdsBootConfig    ndsBoot{};
+    int              speedPercent{100}; // 100, 150, 200, 300, 0 (Uncapped)
+    FastForwardMode  fastForwardMode{FastForwardMode::Hold};
+    FastForwardSpeed fastForwardSpeed{FastForwardSpeed::Speed8x};
 
     std::array<DualInputSlot, static_cast<std::size_t>(GbaAction::Count)>    controls{};
     std::array<DualInputSlot, static_cast<std::size_t>(HotkeyAction::Count)> hotkeys{};

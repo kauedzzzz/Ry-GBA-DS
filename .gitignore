@@ -30,6 +30,9 @@ roms/*.gba
 eden_library.cfg
 *.log
 .aider*
+node_modules/
+package-lock.json
+package.json
 
 # OS artifacts
 .DS_Store

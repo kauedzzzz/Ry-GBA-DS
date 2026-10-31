@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
+#include <iostream>
 
 namespace gba::core::nds {
 
@@ -190,25 +192,68 @@ void NdsBus::setupDirectBoot() {
     // User Settings do Firmware (incluindo calibração 1:1 do Touchscreen!) em 0x027FFC80
     m_touch.populateDefaultFirmwareUserSettings(&m_mainRam[0x3FFC80u]);
 
-    // 3. Carrega binário ARM9 em arm9RamAddress
-    if (m_arm9 && hdr.arm9RomOffset < rom.size()) {
+    // 3. Mapeia e carrega binário ARM9 na RAM de destino
+    if (m_arm9 && hdr.arm9RomOffset < rom.size() && hdr.arm9Size > 0) {
         const std::size_t maxCopy = std::min<std::size_t>(hdr.arm9Size, rom.size() - hdr.arm9RomOffset);
-        for (std::size_t i = 0; i < maxCopy; ++i) {
-            m_arm9->dataWrite8(hdr.arm9RamAddress + static_cast<uint32_t>(i), rom[hdr.arm9RomOffset + i]);
+        if ((hdr.arm9RamAddress >> 24) == 0x02) {
+            const uint32_t ramOffset = hdr.arm9RamAddress & 0x3FFFFFu;
+            const std::size_t ramDest = (ramOffset < m_mainRam.size()) ? (m_mainRam.size() - ramOffset) : 0;
+            const std::size_t toCopy = std::min(maxCopy, ramDest);
+            std::memcpy(&m_mainRam[ramOffset], &rom[hdr.arm9RomOffset], toCopy);
+        } else {
+            for (std::size_t i = 0; i < maxCopy; ++i) {
+                m_arm9->dataWrite8(hdr.arm9RamAddress + static_cast<uint32_t>(i), rom[hdr.arm9RomOffset + i]);
+            }
         }
+        m_arm9->initDirectBoot(hdr.arm9EntryAddress);
         // Handler IRQ default em [DTCM + 0x3FFC]
         m_arm9->dataWrite32(m_arm9->dtcmBase() + 0x3FFCu, 0xFFFF0140u);
-        m_arm9->initDirectBoot(hdr.arm9EntryAddress);
     }
 
-    // 4. Carrega binário ARM7 em arm7RamAddress
-    if (m_arm7 && hdr.arm7RomOffset < rom.size()) {
+    // 4. Mapeia e carrega binário ARM7 na RAM de destino
+    if (m_arm7 && hdr.arm7RomOffset < rom.size() && hdr.arm7Size > 0) {
         const std::size_t maxCopy = std::min<std::size_t>(hdr.arm7Size, rom.size() - hdr.arm7RomOffset);
-        for (std::size_t i = 0; i < maxCopy; ++i) {
-            arm7Write8(hdr.arm7RamAddress + static_cast<uint32_t>(i), rom[hdr.arm7RomOffset + i]);
+        if ((hdr.arm7RamAddress >> 24) == 0x02) {
+            const uint32_t ramOffset = hdr.arm7RamAddress & 0x3FFFFFu;
+            const std::size_t ramDest = (ramOffset < m_mainRam.size()) ? (m_mainRam.size() - ramOffset) : 0;
+            const std::size_t toCopy = std::min(maxCopy, ramDest);
+            std::memcpy(&m_mainRam[ramOffset], &rom[hdr.arm7RomOffset], toCopy);
+        } else if (hdr.arm7RamAddress >= 0x03800000u && hdr.arm7RamAddress < 0x03810000u) {
+            const uint32_t wramOffset = hdr.arm7RamAddress & 0xFFFFu;
+            const std::size_t wramDest = (wramOffset < m_arm7Wram.size()) ? (m_arm7Wram.size() - wramOffset) : 0;
+            const std::size_t toCopy   = std::min(maxCopy, wramDest);
+            std::memcpy(&m_arm7Wram[wramOffset], &rom[hdr.arm7RomOffset], toCopy);
+        } else if (hdr.arm7RamAddress >= 0x037F8000u && hdr.arm7RamAddress < 0x03800000u) {
+            const uint32_t wramOffset = (hdr.arm7RamAddress - 0x037F8000u) & 0xFFFFu;
+            const std::size_t wramDest = (wramOffset < m_arm7Wram.size()) ? (m_arm7Wram.size() - wramOffset) : 0;
+            const std::size_t toCopy   = std::min(maxCopy, wramDest);
+            std::memcpy(&m_arm7Wram[wramOffset], &rom[hdr.arm7RomOffset], toCopy);
+        } else {
+            for (std::size_t i = 0; i < maxCopy; ++i) {
+                arm7Write8(hdr.arm7RamAddress + static_cast<uint32_t>(i), rom[hdr.arm7RomOffset + i]);
+            }
         }
         m_arm7->initDirectBoot(hdr.arm7EntryAddress);
+        // Handler IRQ default em ARM7 WRAM [0x0380FFFC]
+        put32Le(m_arm7Wram.data(), 0xFFFCu, 0x00000140u);
     }
+
+    // 5. Inicialização dos registradores de controle de vídeo e timers
+    m_gpu.writeEngine2D32(0, 0x00, 0x00010000u); // DISPCNT Engine A: Graphics display mode 1
+    m_gpu.writeEngine2D32(1, 0x00, 0x00010000u); // DISPCNT Engine B: Graphics display mode 1
+    m_gpu.writePowCnt1(0x820Fu);                  // POWCNT1: Power ON telas e 2D/3D
+
+    for (std::size_t t = 0; t < 4; ++t) {
+        m_timers9[t] = TimerChannel{};
+        m_timers7[t] = TimerChannel{};
+    }
+
+    // 6. Confirmação do boot direto nos logs
+    std::cout << "[NDS Boot] ARM9 mapped to RAM: 0x" << std::hex << std::setw(8) << std::setfill('0') << hdr.arm9RamAddress
+              << " (Size: " << std::dec << hdr.arm9Size << " bytes, PC: 0x" << std::hex << std::setw(8) << hdr.arm9EntryAddress << ")\n";
+    std::cout << "[NDS Boot] ARM7 mapped to RAM: 0x" << std::hex << std::setw(8) << std::setfill('0') << hdr.arm7RamAddress
+              << " (Size: " << std::dec << hdr.arm7Size << " bytes, PC: 0x" << std::hex << std::setw(8) << hdr.arm7EntryAddress << ")\n"
+              << std::dec;
 }
 
 void NdsBus::setNdsKeyState(NdsKey key, bool pressed) noexcept {
@@ -564,7 +609,8 @@ void NdsBus::writeIpcFifoCnt(bool isArm9, uint16_t val) noexcept {
     const bool prevSendIrq = (lat & (1u << 2)) != 0;
     const bool prevRecvIrq = (lat & (1u << 10)) != 0;
 
-    if (val & (1u << 3)) { // Send FIFO Clear
+    const bool sendCleared = (val & (1u << 3)) != 0;
+    if (sendCleared) { // Send FIFO Clear
         sendQ.clear();
         if (isArm9) m_lastFifo9to7 = 0;
         else        m_lastFifo7to9 = 0;
@@ -579,7 +625,7 @@ void NdsBus::writeIpcFifoCnt(bool isArm9, uint16_t val) noexcept {
     const bool nowRecvIrq = (lat & (1u << 10)) != 0;
     const auto& recvQ     = isArm9 ? m_fifo7to9 : m_fifo9to7;
 
-    if (!prevSendIrq && nowSendIrq && sendQ.empty()) {
+    if ((!prevSendIrq || sendCleared) && nowSendIrq && sendQ.empty()) {
         if (isArm9) requestIrq9(NdsIrq::IpcSendEmpty);
         else        requestIrq7(NdsIrq::IpcSendEmpty);
     }
@@ -896,8 +942,14 @@ uint16_t NdsBus::readIo9_16(uint32_t addr) {
         case 0x184: return buildIpcFifoCnt(true);
         case 0x1A0: return m_cart.readAuxSpiCnt();
         case 0x1A2: return m_cart.readAuxSpiData();
+        case 0x1A4: return static_cast<uint16_t>(m_cart.readRomCtrl() & 0xFFFFu);
+        case 0x1A6: return static_cast<uint16_t>((m_cart.readRomCtrl() >> 16) & 0xFFFFu);
         case 0x204: return m_exMemCnt;
         case 0x208: return static_cast<uint16_t>(m_ime9 & 1u);
+        case 0x210: return static_cast<uint16_t>(m_ie9 & 0xFFFFu);
+        case 0x212: return static_cast<uint16_t>((m_ie9 >> 16) & 0xFFFFu);
+        case 0x214: return static_cast<uint16_t>(m_if9 & 0xFFFFu);
+        case 0x216: return static_cast<uint16_t>((m_if9 >> 16) & 0xFFFFu);
         case 0x247: return m_wramCnt;
         case 0x280: return m_divCnt;
         case 0x2B0: return m_sqrtCnt;
@@ -910,8 +962,18 @@ uint16_t NdsBus::readIo9_16(uint32_t addr) {
         return (off & 2u) ? m_timers9[t].control : m_timers9[t].counter;
     }
 
-    const uint32_t w32 = readIo9_32(addr & ~3u);
-    return static_cast<uint16_t>((w32 >> ((addr & 2u) * 8)) & 0xFFFFu);
+    if (off >= 0x0B0u && off < 0x0E0u) {
+        const std::size_t ch = (off - 0x0B0u) / 12u;
+        const uint32_t r     = (off - 0x0B0u) % 12u;
+        if (r == 0) return static_cast<uint16_t>(m_dma9[ch].sad & 0xFFFFu);
+        if (r == 2) return static_cast<uint16_t>((m_dma9[ch].sad >> 16) & 0xFFFFu);
+        if (r == 4) return static_cast<uint16_t>(m_dma9[ch].dad & 0xFFFFu);
+        if (r == 6) return static_cast<uint16_t>((m_dma9[ch].dad >> 16) & 0xFFFFu);
+        if (r == 8) return static_cast<uint16_t>(m_dma9[ch].cnt & 0xFFFFu);
+        if (r == 10) return static_cast<uint16_t>((m_dma9[ch].cnt >> 16) & 0xFFFFu);
+    }
+
+    return 0; // Registrador desconhecido: encerra sem recursão circular
 }
 
 uint32_t NdsBus::readIo9_32(uint32_t addr) {
@@ -1162,14 +1224,30 @@ uint16_t NdsBus::readIo7_16(uint32_t addr) {
         case 0x184: return buildIpcFifoCnt(false);
         case 0x1A0: return m_cart.readAuxSpiCnt();
         case 0x1A2: return m_cart.readAuxSpiData();
+        case 0x1A4: return static_cast<uint16_t>(m_cart.readRomCtrl() & 0xFFFFu);
+        case 0x1A6: return static_cast<uint16_t>((m_cart.readRomCtrl() >> 16) & 0xFFFFu);
         case 0x1C0: return m_touch.readSpiCnt();
         case 0x1C2: return m_touch.readSpiData();
         case 0x204: return m_exMemCnt;
         case 0x208: return static_cast<uint16_t>(m_ime7 & 1u);
+        case 0x210: return static_cast<uint16_t>(m_ie7 & 0xFFFFu);
+        case 0x212: return static_cast<uint16_t>((m_ie7 >> 16) & 0xFFFFu);
+        case 0x214: return static_cast<uint16_t>(m_if7 & 0xFFFFu);
+        case 0x216: return static_cast<uint16_t>((m_if7 >> 16) & 0xFFFFu);
     }
 
-    const uint32_t w32 = readIo7_32(addr & ~3u);
-    return static_cast<uint16_t>((w32 >> ((addr & 2u) * 8)) & 0xFFFFu);
+    if (off >= 0x0B0u && off < 0x0E0u) {
+        const std::size_t ch = (off - 0x0B0u) / 12u;
+        const uint32_t r     = (off - 0x0B0u) % 12u;
+        if (r == 0) return static_cast<uint16_t>(m_dma7[ch].sad & 0xFFFFu);
+        if (r == 2) return static_cast<uint16_t>((m_dma7[ch].sad >> 16) & 0xFFFFu);
+        if (r == 4) return static_cast<uint16_t>(m_dma7[ch].dad & 0xFFFFu);
+        if (r == 6) return static_cast<uint16_t>((m_dma7[ch].dad >> 16) & 0xFFFFu);
+        if (r == 8) return static_cast<uint16_t>(m_dma7[ch].cnt & 0xFFFFu);
+        if (r == 10) return static_cast<uint16_t>((m_dma7[ch].cnt >> 16) & 0xFFFFu);
+    }
+
+    return 0; // Registrador desconhecido: encerra sem recursão circular
 }
 
 uint32_t NdsBus::readIo7_32(uint32_t addr) {

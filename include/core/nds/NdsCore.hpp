@@ -38,7 +38,7 @@ public:
     void loadBuiltInDemoRom();
 
     void reset() override;
-    void runFrame() override;
+    void runFrame(bool skipRendering = false) override;
 
     [[nodiscard]] bool hasRomLoaded() const noexcept override { return m_cart.isLoaded(); }
     [[nodiscard]] std::string romTitle() const noexcept override;

@@ -69,9 +69,10 @@ void GbaCore::reset() {
     m_frameCount = 0;
 }
 
-void GbaCore::runFrame() {
+void GbaCore::runFrame(bool skipRendering) {
     if (!m_bus.hasRom()) return;
 
+    m_ppu.setSkipRender(skipRendering);
     int32_t cyclesRemaining = CYCLES_PER_FRAME;
     while (cyclesRemaining > 0) {
         if (m_input.shouldTriggerKeypadIrq()) {

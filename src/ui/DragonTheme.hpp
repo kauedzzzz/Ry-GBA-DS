@@ -65,6 +65,12 @@ public:
                      ((static_cast<uint8_t>(text[i + 1]) & 0x3Fu) << 6) |
                      (static_cast<uint8_t>(text[i + 2]) & 0x3Fu);
                 i += 3;
+            } else if ((b0 & 0xF8u) == 0xF0u && i + 3 < text.size()) {
+                cp = ((b0 & 0x07u) << 18) |
+                     ((static_cast<uint8_t>(text[i + 1]) & 0x3Fu) << 12) |
+                     ((static_cast<uint8_t>(text[i + 2]) & 0x3Fu) << 6) |
+                     (static_cast<uint8_t>(text[i + 3]) & 0x3Fu);
+                i += 4;
             } else {
                 i += 1;
             }
@@ -147,6 +153,8 @@ private:
                 return {0x40, 0x60, 0x70, 0x78, 0x70, 0x60, 0x40, 0x00};
             case 0x2713: // '✓'
                 return {0x00, 0x06, 0x0C, 0xD8, 0xF0, 0x60, 0x00, 0x00};
+            case 0x1F525: // '🔥'
+                return {0x10, 0x38, 0x74, 0x7E, 0xFE, 0xEF, 0x7E, 0x3C};
             default:
                 return ASCII_GLYPHS['?' - 32];
         }

@@ -45,6 +45,9 @@ public:
     void setTraceEnabled(bool enabled) noexcept { m_traceEnabled = enabled; }
     [[nodiscard]] uint64_t getVBlankIrqCount() const noexcept { return m_vblankIrqCount; }
 
+    void setSkipRender(bool skip) noexcept { m_skipRender = skip; }
+    [[nodiscard]] bool isSkipRender() const noexcept { return m_skipRender; }
+
     void serializeState(SaveStateWriter& out) const;
     bool deserializeState(SaveStateReader& in);
 
@@ -73,6 +76,7 @@ private:
     uint16_t m_dispstat{0};
     bool     m_traceEnabled{false};
     uint64_t m_vblankIrqCount{0};
+    bool     m_skipRender{false};
 
     std::array<uint16_t, 4> m_bgCnt{};
     std::array<uint16_t, 4> m_bgHOfs{};

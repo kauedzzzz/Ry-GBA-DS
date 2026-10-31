@@ -649,8 +649,10 @@ void EmulatorApp::showOsd(std::string msg, uint32_t durationMs, bool withBanner)
 void EmulatorApp::onHotkeyTriggered(config::HotkeyAction hk) {
     switch (hk) {
         case config::HotkeyAction::FastForward:
-            m_fastForward = !m_fastForward;
-            showOsd(m_fastForward ? "Fast Forward: ON" : "Fast Forward: OFF");
+            if (m_cfgMgr.data().fastForwardMode == config::FastForwardMode::Toggle) {
+                m_fastForward = !m_fastForward;
+                showOsd(m_fastForward ? "Fast Forward: ON" : "Fast Forward: OFF");
+            }
             break;
         case config::HotkeyAction::QuickSave:
             if (m_core.hasRomLoaded()) {
@@ -744,6 +746,17 @@ void EmulatorApp::executeMenuCommand(const ui::MenuCommand& cmd) {
         case ui::MenuActionType::ToggleFastForward:
             m_fastForward = !m_fastForward;
             showOsd(m_fastForward ? "Fast Forward: ON" : "Fast Forward: OFF");
+            break;
+        case ui::MenuActionType::SetFastForwardSpeed:
+            m_cfgMgr.data().fastForwardSpeed = static_cast<config::FastForwardSpeed>(cmd.intParam);
+            m_cfgMgr.save();
+            if (cmd.intParam == 0) showOsd("Fast Forward Speed: Uncapped");
+            else showOsd("Fast Forward Speed: " + std::to_string(cmd.intParam) + "x");
+            break;
+        case ui::MenuActionType::SetFastForwardMode:
+            m_cfgMgr.data().fastForwardMode = static_cast<config::FastForwardMode>(cmd.intParam);
+            m_cfgMgr.save();
+            showOsd(cmd.intParam == 0 ? "Fast Forward Mode: Hold (Tab)" : "Fast Forward Mode: Toggle (Tab)");
             break;
         case ui::MenuActionType::SetNdsLayout:
             m_cfgMgr.data().video.ndsLayout = static_cast<config::NdsScreenLayout>(std::clamp(cmd.intParam, 0, 2));
@@ -1008,6 +1021,36 @@ void EmulatorApp::renderOsd(int /*winW*/, int winH) {
     );
 }
 
+void EmulatorApp::renderFastForwardBadge(int winW, int /*winH*/) {
+    if (!m_fastForward || !m_core.hasRomLoaded()) return;
+
+    const auto& cfg = m_cfgMgr.data();
+    std::string badgeText = "FF";
+    switch (cfg.fastForwardSpeed) {
+        case config::FastForwardSpeed::Speed2x:  badgeText = "FF 2x"; break;
+        case config::FastForwardSpeed::Speed4x:  badgeText = "FF 4x"; break;
+        case config::FastForwardSpeed::Speed8x:  badgeText = "FF 8x"; break;
+        case config::FastForwardSpeed::Uncapped: badgeText = "FF MAX"; break;
+    }
+
+    const int tw = ui::DragonFont::measureWidth(badgeText, 1);
+    const int badgeW = tw + 18;
+    const int badgeH = 22;
+    const SDL_Rect badgeRect{winW - badgeW - 14, 30, badgeW, badgeH};
+
+    ui::fillRect(m_renderer, badgeRect, SDL_Color{0x1A, 0x1C, 0x23, 235});
+    ui::strokeRect(m_renderer, badgeRect, ui::DragonPalette::DRAGON_RED);
+    ui::fillRect(m_renderer, SDL_Rect{badgeRect.x, badgeRect.y, 3, badgeRect.h}, ui::DragonPalette::DRAGON_RED);
+    ui::DragonFont::drawText(
+        m_renderer,
+        badgeText,
+        badgeRect.x + 9,
+        badgeRect.y + (badgeH - 8) / 2,
+        1,
+        SDL_Color{0xFF, 0x7B, 0x7B, 255}
+    );
+}
+
 int EmulatorApp::run() {
     using Clock = std::chrono::steady_clock;
     auto nextFrameDeadline = Clock::now();
@@ -1202,15 +1245,37 @@ int EmulatorApp::run() {
 
         if (!m_running) break;
 
+        const auto& cfg = m_cfgMgr.data();
+        if (cfg.fastForwardMode == config::FastForwardMode::Hold) {
+            m_fastForward = m_inputMapper.isHotkeyActive(config::HotkeyAction::FastForward);
+        }
+
         // =====================================================================
         // EXECUÇÃO DO CORE HÍBRIDO NDS / GBA (Desacoplado)
         // =====================================================================
         const bool activelyEmulating = m_core.hasRomLoaded() && !m_paused && !m_modals.isOpen();
         if (activelyEmulating) {
-            const int framesThisTick = m_fastForward ? 3 : 1;
-            for (int f = 0; f < framesThisTick; ++f) {
-                m_core.runFrame();
+            int fastForwardMultiplier = 1;
+            if (m_fastForward) {
+                switch (cfg.fastForwardSpeed) {
+                    case config::FastForwardSpeed::Speed2x:  fastForwardMultiplier = 2; break;
+                    case config::FastForwardSpeed::Speed4x:  fastForwardMultiplier = 4; break;
+                    case config::FastForwardSpeed::Speed8x:  fastForwardMultiplier = 8; break;
+                    case config::FastForwardSpeed::Uncapped: fastForwardMultiplier = 8; break;
+                    default: fastForwardMultiplier = 8; break;
+                }
+            }
+
+            for (int f = 0; f < fastForwardMultiplier; ++f) {
+                const bool skipRendering = (f < fastForwardMultiplier - 1);
+                m_core.runFrame(skipRendering);
                 ++emulatedFramesAcc;
+            }
+
+            // Desacoplamento de áudio: drena amostras excedentes durante Fast Forward para eliminar backpressure
+            if (m_fastForward) {
+                std::array<int16_t, 2048> drain{};
+                while (m_core.pullAudioSamples(drain) > 0) {}
             }
 
             if (m_core.isDualScreen()) {
@@ -1268,6 +1333,7 @@ int EmulatorApp::run() {
         }
 
         renderOsd(winW, winH);
+        renderFastForwardBadge(winW, winH);
 
         // Barra de menu superior (e dropdowns por cima do viewport)
         m_menuBar.render(m_renderer, winW, m_cfgMgr.data(), m_core, m_paused, m_fastForward, m_currentFps);
@@ -1284,7 +1350,7 @@ int EmulatorApp::run() {
             SDL_Delay(12);
             nextFrameDeadline = Clock::now();
         } else {
-            const auto& cfg = m_cfgMgr.data();
+            // Durante Fast Forward, desativa o limitador rígido para rodar na velocidade máxima do hardware
             const bool limitActive = cfg.video.frameLimiter60Fps && !m_fastForward && (cfg.speedPercent > 0);
             if (!limitActive) {
                 nextFrameDeadline = Clock::now();

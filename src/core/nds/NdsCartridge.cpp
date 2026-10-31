@@ -247,7 +247,9 @@ NdsBackupType NdsCartridge::detectBackupType() const noexcept {
         }
         // New Super Mario Bros / Mario Kart DS (EEPROM 64Kb / 512Kb)
         if (prefix3 == "A2D") return NdsBackupType::Eeprom8K;
-        if (prefix3 == "AMC" || prefix3 == "ASM") return NdsBackupType::Eeprom64K;
+        if (prefix3 == "AMC" || prefix3 == "AMK" || prefix3 == "ASM" || prefix3 == "AS6") return NdsBackupType::Eeprom64K;
+        // Castlevania Dawn of Sorrow / Portrait of Ruin / Order of Ecclesia (EEPROM 512Kb / 64KB)
+        if (prefix3 == "ACV" || prefix3 == "AD7" || prefix3 == "AY9") return NdsBackupType::Eeprom64K;
     }
 
     // 2. Varredura de strings do SDK Nintendo Nitro dentro do binário ARM9/ARM7
@@ -295,6 +297,16 @@ void NdsCartridge::initBackupBuffer(NdsBackupType type) {
     }
     m_saveRam.assign(bytes, 0xFFu);
     m_saveDirty = false;
+}
+
+void NdsCartridge::ensureBackupCapacity(std::size_t requiredBytes, NdsBackupType promotedType) {
+    if (m_saveRam.size() < requiredBytes) {
+        m_saveRam.resize(requiredBytes, 0xFFu);
+        m_saveDirty = true;
+    }
+    if (static_cast<uint8_t>(promotedType) > static_cast<uint8_t>(m_backupType)) {
+        m_backupType = promotedType;
+    }
 }
 
 uint8_t NdsCartridge::backupAddrWidth() const noexcept {
@@ -409,17 +421,35 @@ uint8_t NdsCartridge::transferSpiBackupByte(uint8_t txByte, bool /*holdCs*/) {
 
     switch (m_spiCmd) {
         case 0x05: // RDSR (Read Status Register)
-            return m_spiStatusReg;
+            // Bit 0 = WIP (Write In Progress = 0), Bit 1 = WEL (Write Enable Latch)
+            // Os jogos comerciais aguardam continuamente até que WIP == 0.
+            return m_spiStatusReg & ~0x01u;
 
         case 0x01: // WRSR
-            m_spiStatusReg = (txByte & 0xFCu) | (m_spiStatusReg & 0x03u);
+            m_spiStatusReg = (txByte & 0xFCu) | (m_spiStatusReg & 0x02u);
             return 0x00u;
 
         case 0x9F: { // RDID (JEDEC Flash ID: ST M45PE40 512KB = 0x20 0x40 0x13)
+            ensureBackupCapacity(512 * 1024, NdsBackupType::Flash512K);
             const uint32_t idx = m_spiStep++;
             if (idx == 1) return 0x20u;
             if (idx == 2) return 0x40u;
             if (idx == 3) return (m_backupType == NdsBackupType::Flash1M) ? 0x14u : 0x13u;
+            return 0x00u;
+        }
+
+        case 0xAB: { // Read Electronic Signature / Release Deep Power Down
+            ensureBackupCapacity(512 * 1024, NdsBackupType::Flash512K);
+            const uint32_t idx = m_spiStep++;
+            if (idx >= 4) return (m_backupType == NdsBackupType::Flash1M) ? 0x14u : 0x13u;
+            return 0x00u;
+        }
+
+        case 0x90: { // Read Manufacturer and Device ID
+            ensureBackupCapacity(512 * 1024, NdsBackupType::Flash512K);
+            const uint32_t idx = m_spiStep++;
+            if (idx == 4) return 0x20u;
+            if (idx == 5) return 0x13u;
             return 0x00u;
         }
 
@@ -432,6 +462,7 @@ uint8_t NdsCartridge::transferSpiBackupByte(uint8_t txByte, bool /*holdCs*/) {
                 ++m_spiAddrBytesReceived;
                 return 0x00u;
             }
+            if (m_saveRam.empty()) return 0xFFu;
             const uint8_t out = m_saveRam[m_spiAddr % m_saveRam.size()];
             ++m_spiAddr;
             return out;
@@ -447,6 +478,9 @@ uint8_t NdsCartridge::transferSpiBackupByte(uint8_t txByte, bool /*holdCs*/) {
                 return 0x00u;
             }
             if (m_spiStatusReg & 0x02u) {
+                if (m_spiAddr >= m_saveRam.size()) {
+                    ensureBackupCapacity(std::max<std::size_t>(m_saveRam.size() * 2, 512 * 1024), NdsBackupType::Flash512K);
+                }
                 m_saveRam[m_spiAddr % m_saveRam.size()] = txByte;
                 m_saveDirty = true;
             }
@@ -457,6 +491,7 @@ uint8_t NdsCartridge::transferSpiBackupByte(uint8_t txByte, bool /*holdCs*/) {
         case 0xD8: // Sector Erase (64KB)
         case 0xDB: // Page Erase (256B)
         {
+            ensureBackupCapacity(512 * 1024, NdsBackupType::Flash512K);
             if (m_spiAddrBytesReceived < 3) {
                 m_spiAddr = (m_spiAddr << 8) | txByte;
                 ++m_spiAddrBytesReceived;
@@ -467,8 +502,19 @@ uint8_t NdsCartridge::transferSpiBackupByte(uint8_t txByte, bool /*holdCs*/) {
                         m_saveRam[base + i] = 0xFFu;
                     }
                     m_saveDirty = true;
-                    m_spiStatusReg &= ~0x02u;
+                    m_spiStatusReg &= ~0x02u; // Limpa WEL
                 }
+            }
+            return 0x00u;
+        }
+
+        case 0xC7: // Chip Erase
+        {
+            ensureBackupCapacity(512 * 1024, NdsBackupType::Flash512K);
+            if (m_spiStatusReg & 0x02u) {
+                std::fill(m_saveRam.begin(), m_saveRam.end(), 0xFFu);
+                m_saveDirty = true;
+                m_spiStatusReg &= ~0x02u;
             }
             return 0x00u;
         }
@@ -503,8 +549,8 @@ void NdsCartridge::writeRomCtrl(uint32_t val, bool& outDataReady, bool& outTrans
     }
 
     const uint8_t op = m_cardCmd[0];
-    if (op == 0x90 || op == 0xB8) {
-        // Chip ID repetido em palavras de 32 bits
+    if (op == 0x90 || op == 0xB8 || op == 0x9F) {
+        // Read Chip ID (0x00001FC2 repetido a cada 4 bytes)
         for (std::size_t i = 0; i + 3 < transferBytes; i += 4) {
             m_transferBuf[i + 0] = static_cast<uint8_t>(CHIP_ID & 0xFFu);
             m_transferBuf[i + 1] = static_cast<uint8_t>((CHIP_ID >> 8) & 0xFFu);
@@ -517,20 +563,22 @@ void NdsCartridge::writeRomCtrl(uint32_t val, bool& outDataReady, bool& outTrans
             const std::size_t off = i & 0xFFFu;
             m_transferBuf[i] = (off < m_rom.size()) ? m_rom[off] : 0x00u;
         }
-    } else if (op == 0xB7) {
-        // Read Data (big-endian address nos bytes 1..4)
-        uint32_t addr = (static_cast<uint32_t>(m_cardCmd[1]) << 24) |
-                        (static_cast<uint32_t>(m_cardCmd[2]) << 16) |
-                        (static_cast<uint32_t>(m_cardCmd[3]) << 8)  |
-                        static_cast<uint32_t>(m_cardCmd[4]);
-        if (addr < 0x8000u) {
-            addr = 0x8000u + (addr & 0x1FFu);
-        }
-        const uint32_t pageBase = addr & ~0xFFFu;
+    } else if (op == 0xB7 || op == 0xBA) {
+        // Read Data (0xB7) / Read Secure Area (0xBA): leitura sequencial linear contínua
+        const uint32_t addr = (static_cast<uint32_t>(m_cardCmd[1]) << 24) |
+                              (static_cast<uint32_t>(m_cardCmd[2]) << 16) |
+                              (static_cast<uint32_t>(m_cardCmd[3]) << 8)  |
+                              static_cast<uint32_t>(m_cardCmd[4]);
         for (std::size_t i = 0; i < transferBytes; ++i) {
-            const uint32_t cur = pageBase | ((addr + static_cast<uint32_t>(i)) & 0xFFFu);
+            const uint32_t cur = addr + static_cast<uint32_t>(i);
             m_transferBuf[i] = (cur < m_rom.size()) ? m_rom[cur] : 0xFFu;
         }
+    } else if (op == 0x3C || (op >= 0x40 && op <= 0x4F) || op == 0xB6) {
+        // Troca de chaves KEY1/KEY2 ou handshake seguro: completa com sucesso com dados dummy
+        std::fill(m_transferBuf.begin(), m_transferBuf.end(), 0x00u);
+    } else {
+        // Comando não mapeado: completa com 0xFF para nunca travar o barramento
+        std::fill(m_transferBuf.begin(), m_transferBuf.end(), 0xFFu);
     }
 
     // Marca Data Word Ready (bit 23) e mantém Busy (bit 31) até todas as palavras serem lidas

@@ -100,6 +100,7 @@ private:
     void renderStylusCursor(const SDL_Rect& bottomRect, int mouseX, int mouseY);
     void renderIdleScreen(int winW, int winH, int mouseX, int mouseY);
     void renderOsd(int winW, int winH);
+    void renderFastForwardBadge(int winW, int winH);
 };
 
 } // namespace ryugba::frontend

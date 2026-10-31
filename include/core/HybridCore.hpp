@@ -33,7 +33,7 @@ public:
     void setTraceEnabled(bool enabled) noexcept { m_gba.setTraceEnabled(enabled); }
 
     void reset() override;
-    void runFrame() override;
+    void runFrame(bool skipRendering = false) override;
 
     [[nodiscard]] bool hasRomLoaded() const noexcept override { return activeCore().hasRomLoaded(); }
     [[nodiscard]] std::string romTitle() const noexcept override { return activeCore().romTitle(); }

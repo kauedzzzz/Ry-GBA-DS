@@ -150,27 +150,32 @@ void NdsCore::logCartridgeMetadata() const {
 }
 
 void NdsCore::reset() {
-    m_bus.reset();
-    m_arm9.reset();
-    m_arm7.reset();
     m_arm9CycleDebt = 0;
     m_arm7CycleDebt = 0;
     m_frameCount    = 0;
 
-    if (!m_cart.isLoaded()) return;
+    if (!m_cart.isLoaded()) {
+        m_bus.reset();
+        m_arm9.reset();
+        m_arm7.reset();
+        return;
+    }
 
     const bool canBootRealBios = !m_directBootHle && m_bus.hasCustomBios9() && m_bus.hasCustomBios7();
     if (!canBootRealBios) {
         m_bus.setupDirectBoot();
-        m_arm9.initDirectBoot(m_cart.header().arm9EntryAddress);
-        m_arm7.initDirectBoot(m_cart.header().arm7EntryAddress);
+    } else {
+        m_bus.reset();
+        m_arm9.reset();
+        m_arm7.reset();
     }
 }
 
-void NdsCore::runFrame() {
+void NdsCore::runFrame(bool skipRendering) {
     if (!m_cart.isLoaded()) return;
 
-    constexpr int32_t SLICE_ARM7_CYCLES = 32; // Fatia de ~0,95 us (64 ciclos ARM9 : 32 ciclos ARM7)
+    m_gpu.setSkipRender(skipRendering);
+    constexpr int32_t SLICE_ARM7_CYCLES = 128; // Fatia de ~3,8 us (256 ciclos ARM9 : 128 ciclos ARM7)
     int32_t remainingArm7 = ARM7_CYCLES_PER_FRAME;
 
     while (remainingArm7 > 0) {

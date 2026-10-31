@@ -129,7 +129,9 @@ void NdsGpu::stepArm7Cycles(int32_t arm7Cycles) {
         m_dispStat7 |= 0x0002u;
 
         if (m_vcount < VISIBLE_LINES) {
-            renderScanline(m_vcount);
+            if (!m_skipRender) {
+                renderScanline(m_vcount);
+            }
             if (m_bus) m_bus->triggerDmaHBlank();
 
             // Avança pontos de referência internos dos BGs afins (BG2, BG3)
@@ -197,7 +199,9 @@ void NdsGpu::stepArm7Cycles(int32_t arm7Cycles) {
                 m_renderPolys = std::move(m_submittedPolys);
                 m_submittedPolys.clear();
                 m_swapPending = false;
-                rasterize3DFrame();
+                if (!m_skipRender) {
+                    rasterize3DFrame();
+                }
             }
 
             if (m_bus) {

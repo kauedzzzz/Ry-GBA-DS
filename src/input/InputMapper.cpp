@@ -239,6 +239,15 @@ void InputMapper::releaseAllInputs(gba::core::ICoreEmulator& core) noexcept {
     core.setMicBlowing(false);
 }
 
+bool InputMapper::isHotkeyActive(config::HotkeyAction hk) const noexcept {
+    const auto& hotkeys = m_cfgMgr.data().hotkeys;
+    const std::size_t idx = static_cast<std::size_t>(hk);
+    if (idx < hotkeys.size()) {
+        return isSlotPressed(hotkeys[idx]);
+    }
+    return false;
+}
+
 bool InputMapper::isSlotPressed(const config::DualInputSlot& slot) const noexcept {
     if (slot.keyScancode >= 0) {
         if (auto it = m_keyDown.find(slot.keyScancode); it != m_keyDown.end() && it->second) {

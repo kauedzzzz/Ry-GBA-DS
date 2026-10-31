@@ -37,7 +37,11 @@ void NdsArm7Cpu::reset() {
 }
 
 void NdsArm7Cpu::initDirectBoot(uint32_t entryAddr) {
-    reset();
+    m_regs           = CpuRegisters{};
+    m_halted         = false;
+    m_pcModified     = false;
+    m_intrWaitActive = false;
+    m_intrWaitMask   = 0;
 
     // Pilhas pós-firmware configuradas pela BIOS ARM7 dentro da ARM7 WRAM (0x03800000..0x0380FFFF)
     m_regs.r[13]         = 0x0380FD80u; // USR/SYS SP
@@ -49,9 +53,11 @@ void NdsArm7Cpu::initDirectBoot(uint32_t entryAddr) {
     m_regs.r[14]        = entryAddr;
     m_regs.r8_14_usr[6] = entryAddr;
 
-    m_regs.cpsr = static_cast<uint32_t>(CpuMode::System);
-    m_regs.setFlag(CpuRegisters::FLAG_T, (entryAddr & 1u) != 0);
-    m_regs.r[15] = entryAddr & (m_regs.isThumb() ? ~1u : ~3u);
+    m_regs.cpsr = 0x1Fu; // System Mode (0x1F)
+    const bool isThumb = (entryAddr & 1u) != 0;
+    m_regs.setFlag(CpuRegisters::FLAG_T, isThumb);
+    m_regs.r[15] = entryAddr & (isThumb ? ~1u : ~3u);
+    m_pcModified = false;
 }
 
 void NdsArm7Cpu::switchMode(CpuMode newMode) noexcept {

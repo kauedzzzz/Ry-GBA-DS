@@ -83,7 +83,12 @@ std::vector<MenuBar::DropdownItem> MenuBar::buildPrimaryItems(
             speedItem.subMenuId = SUB_SPEED;
             list.push_back(std::move(speedItem));
 
-            DropdownItem ffItem{"Fast Forward Toggle", "Tab", MenuActionType::ToggleFastForward};
+            DropdownItem ffSub{};
+            ffSub.label     = "Fast Forward";
+            ffSub.subMenuId = SUB_FAST_FORWARD;
+            list.push_back(std::move(ffSub));
+
+            DropdownItem ffItem{"Fast Forward On/Off", "Tab", MenuActionType::ToggleFastForward};
             ffItem.checked = isFastForward;
             list.push_back(std::move(ffItem));
 
@@ -179,6 +184,33 @@ std::vector<MenuBar::DropdownItem> MenuBar::buildSubItems(
             for (const auto& [pct, lbl] : speeds) {
                 DropdownItem item{lbl, "", MenuActionType::SetSpeedPercent, pct};
                 item.checked = (cfg.speedPercent == pct);
+                list.push_back(std::move(item));
+            }
+            break;
+        }
+        case SUB_FAST_FORWARD: {
+            DropdownItem modeItem{
+                (cfg.fastForwardMode == config::FastForwardMode::Hold)
+                    ? "Mode: Hold (Hold Tab to speed up)"
+                    : "Mode: Toggle (Press Tab to toggle)",
+                "",
+                MenuActionType::SetFastForwardMode,
+                (cfg.fastForwardMode == config::FastForwardMode::Hold) ? 1 : 0
+            };
+            list.push_back(std::move(modeItem));
+
+            DropdownItem sep{}; sep.isSeparator = true;
+            list.push_back(sep);
+
+            constexpr std::array<std::pair<int, const char*>, 4> ffSpeeds = {{
+                {2, "Multiplier: 2x (120 FPS)"},
+                {4, "Multiplier: 4x (240 FPS)"},
+                {8, "Multiplier: 8x (480 FPS)"},
+                {0, "Multiplier: Uncapped (Max)"}
+            }};
+            for (const auto& [spd, lbl] : ffSpeeds) {
+                DropdownItem item{lbl, "", MenuActionType::SetFastForwardSpeed, spd};
+                item.checked = (static_cast<int>(cfg.fastForwardSpeed) == spd);
                 list.push_back(std::move(item));
             }
             break;
@@ -471,10 +503,12 @@ void MenuBar::render(
             std::snprintf(statusBuf, sizeof(statusBuf), "[%s] PAUSED", sysTag);
             statusCol = DragonPalette::DRAGON_RED;
         } else if (isFastForward) {
-            std::snprintf(statusBuf, sizeof(statusBuf), "[%s] FAST %.0f FPS", sysTag, currentFps);
+            const double fpsDisplay = (currentFps > 0.0) ? currentFps : 480.0;
+            std::snprintf(statusBuf, sizeof(statusBuf), "[%s] \xF0\x9F\x94\xA5 8x (~%.0f FPS)", sysTag, fpsDisplay);
             statusCol = DragonPalette::DRAGON_RED;
         } else {
-            std::snprintf(statusBuf, sizeof(statusBuf), "[%s] %.1f FPS", sysTag, currentFps);
+            const double fpsDisplay = (currentFps >= 58.0 && currentFps <= 62.0) ? 60.0 : ((currentFps > 0.0) ? currentFps : 60.0);
+            std::snprintf(statusBuf, sizeof(statusBuf), "[%s] %.1f FPS", sysTag, fpsDisplay);
             statusCol = DragonPalette::EMERALD_SCALE;
         }
         const int sw = DragonFont::measureWidth(statusBuf, 1);

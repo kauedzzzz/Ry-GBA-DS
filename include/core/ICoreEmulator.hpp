@@ -27,7 +27,7 @@ public:
     virtual bool loadRomFromFile(const std::filesystem::path& romPath, SaveType saveType = SaveType::AutoDetect) = 0;
 
     virtual void reset() = 0;
-    virtual void runFrame() = 0;
+    virtual void runFrame(bool skipRendering = false) = 0;
 
     [[nodiscard]] virtual bool hasRomLoaded() const noexcept = 0;
     [[nodiscard]] virtual std::string romTitle() const noexcept = 0;

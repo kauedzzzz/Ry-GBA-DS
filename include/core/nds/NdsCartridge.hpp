@@ -148,6 +148,7 @@ private:
     void parseHeaderAndBanner();
     [[nodiscard]] NdsBackupType detectBackupType() const noexcept;
     void initBackupBuffer(NdsBackupType type);
+    void ensureBackupCapacity(std::size_t requiredBytes, NdsBackupType promotedType);
     [[nodiscard]] uint8_t backupAddrWidth() const noexcept;
     uint8_t transferSpiBackupByte(uint8_t txByte, bool holdCs);
 };

@@ -92,9 +92,15 @@ flowchart TD
 ### 1. Leitor de Cartuchos e Saves (`NdsCartridge`)
 - **Parser de Cabeçalho `.nds`:** Extrai metadados completos (`Game Title`, `Game Code`, `Maker Code`, `Unit Code` NDS/DSi, capacidade, offsets e endereços de carga em RAM do ARM9/ARM7 e CRC16).
 - **Banner e Ícone 32x32:** Extrai o banner gráfico animável/estático de 32x32 pixels em 16 cores (4bpp tiled BGR555) e o título UTF-16LE, convertendo-os para ARGB8888 e UTF-8 para exibição no OSD e diálogos.
+- **Protocolo de Barramento de Cartucho (ROM Card Bus):**
+  - Streaming linear contínuo e sequencial para comandos `0xB7` (Read Data) e `0xBA` (Read Secure Area), sem corromper estruturas do sistema de arquivos NitroSDK (FAT/FNT, overlays) e sem wrap incorreto de páginas de 4KB.
+  - Respostas completas para comandos `0x00` (Header), `0x90`/`0x9F`/`0xB8` (Chip ID `0x00001FC2`), `0x3C` (KEY1 mode switch) e `0x40..0x4F` (KEY2) sem retenção indevida do bit Busy de `ROMCTRL`.
 - **Direct Boot / HLE pós-firmware (Padrão):** Inicializa o sistema no estado pós-firmware padrão da Nintendo sem depender de BIOS externa, configurando a área `0x027FF800..0x027FFFFF`, cabeçalho em `0x027FFE00`, User Settings com calibração 1:1 em `0x027FFC80` e registradores de CPU.
 - **Suporte a BIOS Real (Opcional):** Suporta `bios9.bin` (4 KB), `bios7.bin` (16 KB) e `firmware.bin` (256/512 KB) se configurados pelo usuário.
-- **Persistência de Saves `.sav`:** Barramento `AUXSPI` suportando EEPROM 4Kb (512B), EEPROM 64Kb (8KB), EEPROM 512Kb (64KB), Flash 256KB/512KB/1MB/8MB e FRAM 32KB com gravação automática e sincronização com o disco.
+- **Gerenciador Universal de Saves (.sav com Auto-Detection & Dynamic Resize):**
+  - Suporte completo a **EEPROM 4Kb (512B)**, **EEPROM 64Kb (8KB)**, **EEPROM 512Kb (64KB)**, **Flash 256KB/512KB/1MB/8MB** e **FRAM 32KB**.
+  - Detecção dinâmica baseada em Game Code, varredura de assinaturas do NitroSDK e promoção em tempo de execução: comandos como `0x9F` (JEDEC RDID), `0xAB` (Read Signature) ou `0xD8`/`0xDB` (Sector/Page Erase) expandem dinamicamente a memória de save preservando dados existentes.
+  - O registrador de status (RDSR `0x05`) retorna `WIP = 0` imediato, prevenindo congelamentos em telas de "Now Saving..." ou "Checking save data".
 
 ### 2. Dual-Core Lockstep (ARM946E-S + ARM7TDMI)
 - **ARM946E-S (Main CPU @ 66.66 MHz):**
@@ -107,8 +113,9 @@ flowchart TD
   - Relação de clock 1:2 com o ARM9 (lockstep com quantuns de 32 ciclos ARM7 / 64 ciclos ARM9 ao longo de 560.190 ciclos por frame).
   - Controle de barramento SPI (Touchscreen TSC2046, Firmware, Power Management), `EXTKEYIN` e os 16 canais da SPU.
 - **Barramento Compartilhado e IPC (`NdsBus`):**
-  - FIFOs bidirecionais de 16 palavras (`IPCFIFO`) com interrupções `IpcSendEmpty` e `IpcRecvNotEmpty`.
+  - FIFOs bidirecionais de 16 palavras (`IPCFIFO`) com interrupções `IpcSendEmpty` e `IpcRecvNotEmpty` precisas de ciclo acordando processadores do estado `HALT` e chamadas de `IntrWait`.
   - Registradores de sincronismo `IPCSYNC` de 4 bits bidirecionais.
+  - Resolução direta de registradores MMIO com eliminação de recursão mútua e desacoplamento seguro de portas de 16 e 32 bits.
   - **Shared WRAM (32 KB):** chaveamento dinâmico via registrador `WRAMCNT` (ambos os blocos no ARM9, ambos no ARM7 ou divididos 16KB/16KB).
   - 4 MB de Main RAM, 64 KB de ARM7 WRAM e 9 bancos físicos de VRAM (A–I, 656 KB total).
   - Coprocessadores matemáticos em hardware do ARM9: **DIV** (64/32 e 32/32 bits) e **SQRT** (raiz quadrada de 64 e 32 bits).
@@ -164,6 +171,20 @@ Acessível em `Config -> Input and Hotkeys...`:
 - **Sopro no Microfone (Mic Blow):** Tecla `M` por padrão (ou botão de controle). Gera ruído branco de alta fidelidade via LFSR de 32 bits no canal ADC 6 do `TSC2046`, satisfazendo jogos que exigem sopro (como *Zelda: Phantom Hourglass*).
 - **Tampa / Sleep Mode (Lid Sleep):** Tecla `F7` por padrão. Dispara a interrupção de hardware `LidHinge` no ARM7, silenciando o áudio e acionando o modo de suspensão de bateria dos jogos.
 
+### 4. Sistema de Fast Forward (Aceleração até 8x Real & Uncapped)
+- **Modos de Acionamento:**
+  - **Hold (Segurar):** Acelera a emulação apenas enquanto a tecla de atalho (`Tab` ou botão configurado) permanecer pressionada, retornando instantaneamente para 100% ao soltar.
+  - **Toggle (Alternar):** Um toque liga a aceleração contínua e outro toque desliga.
+- **Multiplicadores de Velocidade:**
+  - `2x` (120 FPS), `4x` (240 FPS), `8x` (480 FPS) e `Uncapped` (velocidade máxima permitida pela CPU).
+- **Intelligent Frame Skipping:**
+  - Nos multiplicadores elevados (até 8x), o pipeline executa a emulação completa de CPU, barramento, DMA e timers em todos os quadros, mas pula a rasterização pesada de scanlines e geometria 3D nos quadros intermediários (`skipRendering = true`).
+  - A renderização final e apresentação SDL ocorrem a 60 Hz no último quadro de cada lote, eliminando gargalos de GPU e alcançando 8.0x reais sem engasgos.
+- **Dreno Não-Bloqueante de Áudio:**
+  - Durante o avanço rápido, o buffer circular de áudio descarta amostras excedentes de forma atômica e não-bloqueante, evitando *backpressure* de áudio que travaria o loop principal.
+- **Dragon HUD Badge:**
+  - Pílula visual no canto superior direito da tela indicando a ativação e a taxa atual (`FF 2x`, `FF 4x`, `FF 8x` ou `FF MAX`), desenhada com o tema Dragon (fundo grafite e borda vermelha fogo).
+
 ---
 
 ## 🖥 Estrutura da Barra de Menus (Layout melonDS)
@@ -185,7 +206,13 @@ Acessível em `Config -> Input and Hotkeys...`:
 │   │   ├── 200%
 │   │   ├── 300%
 │   │   └── Uncapped (Max FPS)
-│   ├── Fast Forward Toggle (Tab)
+│   ├── Fast Forward >
+│   │   ├── Mode: Hold (Segurar) / Toggle (Alternar)
+│   │   ├── Multiplier: 2x (120 FPS)
+│   │   ├── Multiplier: 4x (240 FPS)
+│   │   ├── Multiplier: 8x (480 FPS)
+│   │   └── Multiplier: Uncapped (Máximo)
+│   ├── Fast Forward On/Off (Tab)
 │   ├── DS Screen Layout >
 │   │   ├── Vertical (Padrão DS)
 │   │   ├── Horizontal (Lado a Lado)

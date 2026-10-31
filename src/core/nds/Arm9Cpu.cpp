@@ -67,7 +67,7 @@ void Arm9Cpu::reset() {
 
     m_cp15Ctrl = 0x0005707Du; // High exception vectors (0xFFFF0000), DTCM + ITCM ativos
     m_cp15Dtcm = 0x0300000Au; // Base 0x03000000, tamanho virtual 16 KB
-    m_cp15Itcm = 0x00000020u; // Base 0x00000000, tamanho virtual 32 MB
+    m_cp15Itcm = 0x0000000Cu; // Base 0x00000000, tamanho virtual 32 KB
     m_cp15Misc.fill(0);
     m_cp15PuRegions.fill(0);
 
@@ -77,7 +77,15 @@ void Arm9Cpu::reset() {
 }
 
 void Arm9Cpu::initDirectBoot(uint32_t entryAddr) {
-    reset();
+    m_regs           = CpuRegisters{};
+    m_halted         = false;
+    m_pcModified     = false;
+    m_intrWaitActive = false;
+    m_intrWaitMask   = 0;
+
+    m_cp15Ctrl = 0x0005707Du;
+    m_cp15Dtcm = 0x0300000Au;
+    m_cp15Itcm = 0x0000000Cu;
 
     // Pilhas pós-firmware configuradas pela BIOS do Nintendo DS dentro da DTCM (0x03000000..0x03003FFF)
     m_regs.r[13]         = 0x03002F7Cu; // USR/SYS SP
@@ -85,12 +93,14 @@ void Arm9Cpu::initDirectBoot(uint32_t entryAddr) {
     m_regs.r13_14_irq[0] = 0x03003F80u; // IRQ SP
     m_regs.r13_14_svc[0] = 0x03003FC0u; // SVC SP
 
-    m_regs.r[12] = entryAddr;
-    m_regs.r[14] = entryAddr;
+    m_regs.r[12]        = entryAddr;
+    m_regs.r[14]        = entryAddr;
     m_regs.r8_14_usr[6] = entryAddr;
 
-    m_regs.cpsr = static_cast<uint32_t>(CpuMode::System);
-    setPcInterwork(entryAddr);
+    m_regs.cpsr = 0x1Fu; // System Mode (0x1F)
+    const bool isThumb = (entryAddr & 1u) != 0;
+    m_regs.setFlag(CpuRegisters::FLAG_T, isThumb);
+    m_regs.r[15] = entryAddr & (isThumb ? ~1u : ~3u);
     m_pcModified = false;
 }
 
@@ -109,17 +119,19 @@ bool Arm9Cpu::isInDtcmData(uint32_t addr) const noexcept {
 
 bool Arm9Cpu::isInItcmData(uint32_t addr) const noexcept {
     if ((m_cp15Ctrl & (1u << 18)) == 0) return false;
+    const uint32_t base  = m_cp15Itcm & 0xFFFFF000u;
     const uint32_t shift = (m_cp15Itcm >> 1) & 0x1Fu;
     const uint64_t size  = (shift >= 23u) ? 0x100000000ull : (512ull << shift);
-    return static_cast<uint64_t>(addr) < size;
+    return (addr >= base) && (static_cast<uint64_t>(addr - base) < size);
 }
 
 bool Arm9Cpu::isInItcmCode(uint32_t addr) const noexcept {
     if ((m_cp15Ctrl & (1u << 18)) == 0) return false;
     if ((m_cp15Ctrl & (1u << 19)) != 0) return false; // ITCM Load Mode = write-only
+    const uint32_t base  = m_cp15Itcm & 0xFFFFF000u;
     const uint32_t shift = (m_cp15Itcm >> 1) & 0x1Fu;
     const uint64_t size  = (shift >= 23u) ? 0x100000000ull : (512ull << shift);
-    return static_cast<uint64_t>(addr) < size;
+    return (addr >= base) && (static_cast<uint64_t>(addr - base) < size);
 }
 
 uint8_t Arm9Cpu::dataRead8(uint32_t addr) {

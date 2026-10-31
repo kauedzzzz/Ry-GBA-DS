@@ -118,7 +118,9 @@ void Ppu::step(int32_t cycles) {
         m_dispstat |= (1u << 1); // Set HBlank flag
 
         if (m_vcount < SCREEN_HEIGHT) {
-            renderScanline();
+            if (!m_skipRender) {
+                renderScanline();
+            }
             if (m_bus) m_bus->triggerDmaHBlank();
         }
 
@@ -149,7 +151,9 @@ void Ppu::step(int32_t cycles) {
         // Início do VBlank (Linha 160)
         if (m_vcount == SCREEN_HEIGHT) {
             m_dispstat |= (1u << 0); // Set VBlank flag
-            m_frontBuffer = m_backBuffer;
+            if (!m_skipRender) {
+                m_frontBuffer = m_backBuffer;
+            }
             if (m_bus) m_bus->triggerDmaVBlank();
             if ((m_dispstat & (1u << 3)) && m_cpu) {
                 ++m_vblankIrqCount;

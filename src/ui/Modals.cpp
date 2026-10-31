@@ -108,7 +108,7 @@ SDL_Rect ModalManager::modalBox(int winW, int winH) const noexcept {
     switch (m_active) {
         case ModalKind::InputAndHotkeys: w = 556; h = 468; break;
         case ModalKind::OpenRom:         w = 548; h = 418; break;
-        case ModalKind::VideoSettings:   w = 484; h = 408; break;
+        case ModalKind::VideoSettings:   w = 484; h = 452; break;
         case ModalKind::AudioSettings:   w = 468; h = 328; break;
         case ModalKind::About:           w = 516; h = 376; break;
         case ModalKind::GitHubLicense:   w = 508; h = 344; break;
@@ -363,6 +363,30 @@ bool ModalManager::handleVideoConfigEvent(const SDL_Event& ev, const SDL_Rect& b
         boot.directBootHle = !boot.directBootHle;
         m_cfgMgr.save();
         outEffects.ndsBootDirty = true;
+        return true;
+    }
+
+    // Fast Forward Speed (2x, 4x, 8x, Uncapped)
+    constexpr std::array<config::FastForwardSpeed, 4> ffSpeeds = {
+        config::FastForwardSpeed::Speed2x,
+        config::FastForwardSpeed::Speed4x,
+        config::FastForwardSpeed::Speed8x,
+        config::FastForwardSpeed::Uncapped
+    };
+    for (int i = 0; i < 4; ++i) {
+        const SDL_Rect btn{box.x + 18 + i * 86, box.y + 364, 80, 24};
+        if (HitRect{btn}.contains(mx, my)) {
+            m_cfgMgr.data().fastForwardSpeed = ffSpeeds[i];
+            m_cfgMgr.save();
+            return true;
+        }
+    }
+    const SDL_Rect modeBtn{box.x + 368, box.y + 364, 98, 24};
+    if (HitRect{modeBtn}.contains(mx, my)) {
+        m_cfgMgr.data().fastForwardMode = (m_cfgMgr.data().fastForwardMode == config::FastForwardMode::Hold)
+            ? config::FastForwardMode::Toggle
+            : config::FastForwardMode::Hold;
+        m_cfgMgr.save();
         return true;
     }
 
@@ -694,6 +718,23 @@ void ModalManager::renderVideoConfig(SDL_Renderer* r, const SDL_Rect& box) {
     drawCheckbox(r, SDL_Rect{box.x + 18, box.y + 318, 18, 18}, boot.directBootHle,
                  "NDS Direct Boot / HLE (Uncheck for bios9/bios7.bin)",
                  HitRect{SDL_Rect{box.x + 18, box.y + 318, 440, 20}}.contains(m_mouseX, m_mouseY));
+
+    // Configuração de Fast Forward
+    const auto& appCfg = m_cfgMgr.data();
+    DragonFont::drawText(r, "Fast Forward Speed & Mode (Tab):", box.x + 18, box.y + 348, 1, DragonPalette::TEXT_SECONDARY);
+    constexpr std::array<std::pair<config::FastForwardSpeed, const char*>, 4> ffSpeeds = {{
+        {config::FastForwardSpeed::Speed2x,  "2x Speed"},
+        {config::FastForwardSpeed::Speed4x,  "4x Speed"},
+        {config::FastForwardSpeed::Speed8x,  "8x Speed"},
+        {config::FastForwardSpeed::Uncapped, "Uncapped"}
+    }};
+    for (int i = 0; i < 4; ++i) {
+        const SDL_Rect btn{box.x + 18 + i * 86, box.y + 364, 80, 24};
+        drawButton(r, btn, ffSpeeds[i].second, HitRect{btn}.contains(m_mouseX, m_mouseY), appCfg.fastForwardSpeed == ffSpeeds[i].first);
+    }
+    const SDL_Rect modeBtn{box.x + 368, box.y + 364, 98, 24};
+    drawButton(r, modeBtn, appCfg.fastForwardMode == config::FastForwardMode::Hold ? "Mode: Hold" : "Mode: Toggle",
+               HitRect{modeBtn}.contains(m_mouseX, m_mouseY), true);
 
     const SDL_Rect doneBtn{box.x + box.w - 104, box.y + box.h - 36, 88, 26};
     drawButton(r, doneBtn, "Done", HitRect{doneBtn}.contains(m_mouseX, m_mouseY), true);

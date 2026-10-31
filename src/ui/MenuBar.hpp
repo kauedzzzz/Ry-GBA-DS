@@ -20,6 +20,8 @@ enum class MenuActionType {
     ExitApp,
     SetSpeedPercent,
     ToggleFastForward,
+    SetFastForwardSpeed,
+    SetFastForwardMode,
     SetNdsLayout,
     ToggleSwapScreens,
     ToggleLidSleep,
@@ -87,11 +89,12 @@ private:
 
     enum SubMenuKind : int {
         SUB_NONE        = -1,
-        SUB_OPEN_RECENT = 0,
-        SUB_SPEED       = 1,
-        SUB_NDS_LAYOUT  = 2,
-        SUB_SAVE_STATE  = 3,
-        SUB_LOAD_STATE  = 4
+        SUB_OPEN_RECENT    = 0,
+        SUB_SPEED          = 1,
+        SUB_NDS_LAYOUT     = 2,
+        SUB_SAVE_STATE     = 3,
+        SUB_LOAD_STATE     = 4,
+        SUB_FAST_FORWARD   = 5
     };
 
     SDL_Texture* m_brandIconTex{nullptr};

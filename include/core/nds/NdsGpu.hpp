@@ -62,6 +62,9 @@ public:
     [[nodiscard]] bool isGxFifoLessThanHalfFull() const noexcept { return m_gxCmdQueue.size() < 128; }
     [[nodiscard]] uint64_t vblankCount() const noexcept { return m_vblankCount; }
 
+    void setSkipRender(bool skip) noexcept { m_skipRender = skip; }
+    [[nodiscard]] bool isSkipRender() const noexcept { return m_skipRender; }
+
     void serializeState(SaveStateWriter& out) const;
     bool deserializeState(SaveStateReader& in);
 
@@ -109,6 +112,7 @@ private:
     uint16_t m_dispStat7{0};
     uint16_t m_powCnt1{0x820Fu}; // Telas, 2D A/B e 3D ativos; Engine A no topo por padrão
     uint64_t m_vblankCount{0};
+    bool     m_skipRender{false};
 
     std::array<Engine2DState, 2> m_eng{};
     std::array<uint32_t, SCREEN_WIDTH * SCREEN_HEIGHT> m_topScreen{};

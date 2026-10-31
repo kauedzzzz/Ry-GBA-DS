@@ -100,8 +100,8 @@ void HybridCore::reset() {
     activeCore().reset();
 }
 
-void HybridCore::runFrame() {
-    activeCore().runFrame();
+void HybridCore::runFrame(bool skipRendering) {
+    activeCore().runFrame(skipRendering);
 }
 
 void HybridCore::setVolume(float volume) noexcept {
